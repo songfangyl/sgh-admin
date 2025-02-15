@@ -1,77 +1,47 @@
 import Layout from "@/components/Layout";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import axios from "axios";
+
+const fetcher = (url) => axios.get(url).then((res) => res.data);
 
 export default function AdminManagement() {
-  const [admins, setAdmins] = useState([]);
+  const { data: admins, error, isLoading, mutate } = useSWR("/api/admins", fetcher);
+  
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  useEffect(() => {
-    fetchAdmins();
-  }, []);
-
-  const fetchAdmins = async () => {
-    try {
-      const response = await fetch("/api/admins");
-      const data = await response.json();
-      setAdmins(data);
-    } catch (err) {
-      setError("Failed to fetch admins.");
-    }
-  };
+  const [feedback, setFeedback] = useState({ message: "", type: "" });
 
   const handleAddAdmin = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
-    
+    setFeedback({ message: "", type: "" });
+
     if (!email || !email.includes("@")) {
-      setError("Please enter a valid email address.");
+      setFeedback({ message: "Please enter a valid email address.", type: "error" });
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch("/api/admins", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to add admin.");
-      }
-
-      setSuccess("Admin added successfully!");
+      await axios.post("/api/admins", { email });
+      setFeedback({ message: "Admin added successfully!", type: "success" });
       setEmail("");
-      fetchAdmins();
+      mutate(); // Refresh the admin list
     } catch (err) {
-      setError(err.message);
+      setFeedback({ message: "Failed to add admin.", type: "error" });
     }
     setLoading(false);
   };
 
   const handleDeleteAdmin = async (adminId) => {
-    setError("");
-    setSuccess("");
-    
+    setFeedback({ message: "", type: "" });
+
     try {
-      const response = await fetch(`/api/admins?_id=${adminId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete admin.");
-      }
-
-      setSuccess("Admin removed successfully!");
-      fetchAdmins();
+      await axios.delete(`/api/admins?_id=${adminId}`);
+      setFeedback({ message: "Admin removed successfully!", type: "success" });
+      mutate(); // Refresh the admin list
     } catch (err) {
-      setError(err.message);
+      setFeedback({ message: "Failed to delete admin.", type: "error" });
     }
   };
 
@@ -79,8 +49,12 @@ export default function AdminManagement() {
     <Layout>
       <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md mt-10">
         <h2 className="text-xl font-semibold mb-4">Admin Management</h2>
-        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-        {success && <p className="text-green-500 text-sm mb-2">{success}</p>}
+        
+        {feedback.message && (
+          <p className={`text-sm mb-2 ${feedback.type === "error" ? "text-red-500" : "text-green-500"}`}>
+            {feedback.message}
+          </p>
+        )}
         
         <form onSubmit={handleAddAdmin} className="space-y-4">
           <input
@@ -100,19 +74,25 @@ export default function AdminManagement() {
         </form>
         
         <h3 className="text-lg font-semibold mt-6">Existing Admins</h3>
-        <ul className="mt-4 space-y-2">
-          {admins.map((admin) => (
-            <li key={admin._id} className="flex justify-between items-center p-2 border rounded-md">
-              <span>{admin.email}</span>
-              <button
-                className="p-1 bg-red-500 text-white rounded-md hover:bg-red-600"
-                onClick={() => handleDeleteAdmin(admin._id)}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+        {isLoading ? (
+          <p className="text-gray-500 mt-4">Loading...</p>
+        ) : error ? (
+          <p className="text-red-500 mt-4">Failed to fetch admins.</p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {admins?.map((admin) => (
+              <li key={admin._id} className="flex justify-between items-center p-2 border rounded-md">
+                <span>{admin.email}</span>
+                <button
+                  className="p-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+                  onClick={() => handleDeleteAdmin(admin._id)}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Layout>
   );

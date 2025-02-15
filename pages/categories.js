@@ -1,24 +1,18 @@
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 import axios from "axios";
 import { withSwal } from 'react-sweetalert2';
+import { useState } from "react";
+
+const fetcher = (url) => axios.get(url).then((res) => res.data);
 
 function Categories({ swal }) {
+  const { data: categories, error, isLoading, mutate } = useSWR("/api/categories", fetcher);
+  
   const [editedCategory, setEditedCategory] = useState(null);
   const [name, setName] = useState('');
   const [parentCategory, setParentCategory] = useState('');
-  const [categories, setCategories] = useState([]);
   const [properties, setProperties] = useState([]);
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  function fetchCategories() {
-    axios.get('/api/categories').then(result => {
-      setCategories(result.data);
-    });
-  }
 
   async function saveCategory(ev) {
     ev.preventDefault();
@@ -30,6 +24,7 @@ function Categories({ swal }) {
         values: p.values.split(','),
       })),
     };
+
     if (editedCategory) {
       data._id = editedCategory._id;
       await axios.put('/api/categories', data);
@@ -37,10 +32,11 @@ function Categories({ swal }) {
     } else {
       await axios.post('/api/categories', data);
     }
+
     setName('');
     setParentCategory('');
     setProperties([]);
-    fetchCategories();
+    mutate(); // Refresh categories list after saving
   }
 
   function editCategory(category) {
@@ -64,11 +60,10 @@ function Categories({ swal }) {
       confirmButtonText: 'Yes, Delete!',
       confirmButtonColor: '#d55',
       reverseButtons: true,
-    }).then(async result => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        const { _id } = category;
-        await axios.delete('/api/categories?_id=' + _id);
-        fetchCategories();
+        await axios.delete(`/api/categories?_id=${category._id}`);
+        mutate(); // Refresh list after deleting
       }
     });
   }
@@ -112,7 +107,7 @@ function Categories({ swal }) {
               value={parentCategory}
             >
               <option value="">No parent category</option>
-              {categories.map(category => (
+              {categories?.map(category => (
                 <option key={category._id} value={category._id}>{category.name}</option>
               ))}
             </select>
@@ -163,6 +158,7 @@ function Categories({ swal }) {
             <button type="submit" className="btn-primary px-4 py-2">Save</button>
           </div>
         </form>
+
         {!editedCategory && (
           <table className="w-full border-collapse shadow-md mt-4 bg-white rounded-lg">
             <thead>
@@ -173,16 +169,22 @@ function Categories({ swal }) {
               </tr>
             </thead>
             <tbody>
-              {categories.map(category => (
-                <tr key={category._id} className="border-b hover:bg-gray-50">
-                  <td className="p-3">{category.name}</td>
-                  <td className="p-3">{category?.parent?.name}</td>
-                  <td className="p-3 text-right">
-                    <button onClick={() => editCategory(category)} className="btn-default mr-2">Edit</button>
-                    <button onClick={() => deleteCategory(category)} className="btn-red">Delete</button>
-                  </td>
+              {isLoading ? (
+                <tr>
+                  <td className="p-3" colSpan="3">Loading...</td>
                 </tr>
-              ))}
+              ) : (
+                categories?.map(category => (
+                  <tr key={category._id} className="border-b hover:bg-gray-50">
+                    <td className="p-3">{category.name}</td>
+                    <td className="p-3">{category?.parent?.name}</td>
+                    <td className="p-3 text-right">
+                      <button onClick={() => editCategory(category)} className="btn-default mr-2">Edit</button>
+                      <button onClick={() => deleteCategory(category)} className="btn-red">Delete</button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
